@@ -22,7 +22,7 @@ The official Bale Bot API documentation at <https://docs.bale.ai/> is the refere
 
 These behaviors are not specified sufficiently to rely on without defensive handling. The client must tolerate failure and must not let any one failure crash the process.
 
-1. **Rate limiting:** Rate limits and the exact 429 response shape are not documented. Honor a numeric retry hint in `parameters` if present, or `Retry-After`; otherwise use bounded exponential backoff with jitter. Adapt the global send rate conservatively.
+1. **Rate limiting:** Rate limits and the exact 429 response shape are not documented. Honor a numeric retry hint in `parameters` if present, or `Retry-After`; otherwise use bounded exponential backoff with jitter. Adapt the global send rate conservatively. When HTTP 429 has no usable Bale envelope, the client preserves the header retry hint in its typed HTTP error for the sender.
 2. **Retry hint keys and units:** `parameters` is documented generically, but exact field names, numeric types, and units are not. Parse known candidates defensively and ignore malformed values.
 3. **Transient failures:** Whether Bale uses particular HTTP status codes for internal errors, overload, or temporary unavailability is not documented. Retry network errors and 5xx responses with a bounded policy; do not infer success from malformed envelopes.
 4. **Permanent recipient failures:** Exact codes/descriptions for blocked bots, forbidden chats, and missing chats are not stable/documented as a machine-readable contract. Classify using conservative status/code/text patterns, preserve the raw safe error class, and manually validate against a live bot.

@@ -48,6 +48,10 @@ class PublicHandlers:
                 source=source,
                 consent_version=self._business.business.consent_version,
             )
+            await self._client.send_message(
+                message.chat.id,
+                self._business.business.consent_text,
+            )
             welcome = self._business.business.welcome_message.replace(
                 "{business_name}",
                 self._business.business.name,

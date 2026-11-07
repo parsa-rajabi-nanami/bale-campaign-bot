@@ -29,10 +29,22 @@ Start with [`config/business.example.yaml`](../config/business.example.yaml), co
 - `business.phone_linking_enabled` enables the explicit Bale contact-sharing button. Only contacts whose Bale user ID matches the sender are accepted.
 - `working_hours` and `support_contact` are optional display values.
 - Each `default_menu` button must have a label and exactly one action: `url` or `callback`. Callback data is limited to 64 UTF-8 bytes as required by Bale.
-- `consent_text` and `consent_version` describe the opt-in shown to subscribers. Keep the version stable until consent wording changes.
+- `consent_text` is shown when a user starts or restarts the bot, and `consent_version` is stored with that opt-in. Change the version whenever the consent wording changes.
 - `opt_out_confirmation_text` is sent after `/stop`. `footer_text` is sent separately only when `footer_enabled` is true.
 - `timezone` must be an installed IANA timezone. `locale` is `fa` or `en`; Persian is right-to-left.
 - `campaign_defaults` controls the default rate, concurrency, and optional quiet-hours window.
+
+## Campaign delivery
+
+The admin wizard previews by copying the original message, accepts an all-active or tag-filtered audience, and records scheduled campaigns in UTC after interpreting the entered time in the business timezone. Quiet-hours selections move forward to the next allowed time. CTA buttons and the optional business footer are sent as separate follow-up messages because Bale does not document a `copyMessage` keyboard override.
+
+The sender uses a database lease so only one process schedules and sends campaigns at a time. It claims bounded recipient batches, adapts its global rate after rate-limit responses, and retries transient network/5xx failures up to five recipient attempts. Choose a low starting `SEND_RATE_PER_SECOND`; Bale publishes no stable throughput guarantee. Pause, resume, and cancel campaigns in the private admin chat with `/pause_ID`, `/resume_ID`, and `/cancel_ID` using the ID shown by «کمپین‌ها».
+
+## Campaign delivery
+
+The admin wizard previews by copying the original message, accepts an all-active or tag-filtered audience, and records scheduled campaigns in UTC after interpreting the entered time in the business timezone. Quiet-hours selections move forward to the next allowed time. CTA buttons and the optional business footer are sent as separate follow-up messages because Bale does not document a `copyMessage` keyboard override.
+
+The sender uses a database lease so only one process schedules and sends campaigns at a time. It claims bounded recipient batches, adapts its global rate after rate-limit responses, and retries transient network/5xx failures up to five recipient attempts. Choose a low starting `SEND_RATE_PER_SECOND`; Bale publishes no stable throughput guarantee. Pause, resume, and cancel campaigns in the private admin chat with `/pause_ID`, `/resume_ID`, and `/cancel_ID` using the ID shown by «کمپین‌ها».
 
 Run `python -m bale_campaign_bot.cli doctor` after editing. Validation errors include an English field path and Persian/English error heading.
 

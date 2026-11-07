@@ -39,8 +39,15 @@ class BaleAPIError(BaleError):
 class BaleHTTPError(BaleError):
     """An HTTP failure without a usable Bale error envelope."""
 
-    def __init__(self, method: str, status_code: int) -> None:
+    def __init__(
+        self,
+        method: str,
+        status_code: int,
+        *,
+        retry_after: float | None = None,
+    ) -> None:
         self.status_code = status_code
+        self.retry_after = retry_after
         super().__init__(method, f"HTTP status {status_code}")
 
 

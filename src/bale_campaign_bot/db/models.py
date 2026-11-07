@@ -137,6 +137,8 @@ class Campaign(TimestampMixin, Base):
     failed_count: Mapped[int] = mapped_column(Integer, default=0)
     blocked_count: Mapped[int] = mapped_column(Integer, default=0)
     skipped_count: Mapped[int] = mapped_column(Integer, default=0)
+    progress_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    summary_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         CheckConstraint(
             "status IN ('draft', 'scheduled', 'running', 'paused', "

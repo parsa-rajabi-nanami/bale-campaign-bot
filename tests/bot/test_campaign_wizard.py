@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 import httpx
+import pytest
 import respx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -12,7 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from bale_campaign_bot.bale.client import BaleClient
 from bale_campaign_bot.bale.models import Chat, Message, User
 from bale_campaign_bot.bot.fsm import FSMContext
-from bale_campaign_bot.bot.handlers.admin import AdminHandlers, _quiet_adjust
+from bale_campaign_bot.bot.handlers.admin import (
+    AdminHandlers,
+    _parse_local_datetime,
+    _quiet_adjust,
+)
 from bale_campaign_bot.config.business import BusinessConfig, validate_business_config
 from bale_campaign_bot.db.models import Admin, Campaign, Subscriber
 from bale_campaign_bot.services.admins import AdminBootstrapService
@@ -61,6 +66,11 @@ def test_quiet_hours_move_campaign_to_next_allowed_local_time() -> None:
         end_text="08:00",
     )
     assert unchanged == during_working_hours.astimezone(timezone)
+
+
+def test_schedule_rejects_nonexistent_local_clock_time() -> None:
+    with pytest.raises(ValueError):
+        _parse_local_datetime("2026-03-08 02:30", ZoneInfo("America/New_York"))
 
 
 async def test_campaign_wizard_persists_across_handler_restart_and_test_is_private(

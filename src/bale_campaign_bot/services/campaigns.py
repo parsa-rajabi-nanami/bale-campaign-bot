@@ -10,7 +10,11 @@ from urllib.parse import urlsplit
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bale_campaign_bot.db.models import Campaign
-from bale_campaign_bot.db.repositories import CampaignRepository, TagRepository
+from bale_campaign_bot.db.repositories import (
+    BroadcastRepository,
+    CampaignRepository,
+    TagRepository,
+)
 
 Clock = Callable[[], datetime]
 
@@ -183,6 +187,16 @@ class CampaignService:
             if campaign is None:
                 raise CampaignError("Campaign does not exist.")
             self._transition(campaign, target)
+
+    async def cancel(self, campaign_id: int) -> int:
+        async with self._session_factory() as session, session.begin():
+            campaign = await CampaignRepository(session).get(campaign_id)
+            if campaign is None:
+                raise CampaignError("Campaign does not exist.")
+            self._transition(campaign, CampaignStatus.CANCELLED)
+            return await BroadcastRepository(session, clock=self._clock).cancel_campaign(
+                campaign_id
+            )
 
     async def list_for_admin(self, user_id: int, *, limit: int = 20) -> list[Campaign]:
         async with self._session_factory() as session:

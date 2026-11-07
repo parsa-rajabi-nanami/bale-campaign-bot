@@ -144,6 +144,30 @@ async def test_rate_limit_without_hint_uses_backoff_then_raises(
     assert sleeps == [pytest.approx(0.15)]
 
 
+async def test_unstructured_429_retains_retry_after_hint(
+    fake_bale_server: respx.MockRouter,
+) -> None:
+    fake_bale_server.post("getMe").mock(
+        return_value=httpx.Response(429, headers={"Retry-After": "4"}, content=b"unavailable")
+    )
+    async with make_client([], max_attempts=1) as client:
+        with pytest.raises(BaleHTTPError) as captured:
+            await client.get_me()
+    assert captured.value.status_code == 429
+    assert captured.value.retry_after == 4
+
+
+async def test_edit_message_text_never_sends_keyboard(
+    fake_bale_server: respx.MockRouter,
+) -> None:
+    route = fake_bale_server.post("editMessageText")
+    route.mock(return_value=httpx.Response(200, json={"ok": True, "result": True}))
+    async with make_client([]) as client:
+        assert await client.edit_message_text(20, 30, "Progress 1 / 2") is True
+    payload = route.calls.last.request.content
+    assert b"reply_markup" not in payload
+
+
 async def test_network_failure_retries_without_exposing_token(
     fake_bale_server: respx.MockRouter,
 ) -> None:

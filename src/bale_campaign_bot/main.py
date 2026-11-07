@@ -19,6 +19,7 @@ from bale_campaign_bot.config.settings import Settings
 from bale_campaign_bot.db.session import create_engine, create_session_factory, ensure_sqlite_parent
 from bale_campaign_bot.logging import configure_logging
 from bale_campaign_bot.services.admins import AdminBootstrapService
+from bale_campaign_bot.services.sender import BroadcastWorker
 from bale_campaign_bot.services.subscribers import SubscriberService
 
 
@@ -63,23 +64,38 @@ async def _serve(settings: Settings) -> None:
             )
             router = BotRouter(client, public_handlers, admin_handlers)
             dispatcher = UpdateDispatcher(client, router, session_factory)
+            sender = BroadcastWorker(
+                client,
+                session_factory,
+                business,
+                rate_per_second=settings.send_rate_per_second,
+                concurrency=settings.send_concurrency,
+            )
             dispatcher_task = asyncio.create_task(
                 dispatcher.run(stop_event), name="bale-update-poller"
             )
+            sender_task = asyncio.create_task(sender.run(stop_event), name="campaign-sender")
             stop_task = asyncio.create_task(stop_event.wait(), name="shutdown-signal")
             try:
                 done, _ = await asyncio.wait(
-                    {dispatcher_task, stop_task},
+                    {dispatcher_task, sender_task, stop_task},
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if dispatcher_task in done:
                     dispatcher_task.result()
+                if sender_task in done:
+                    sender_task.result()
             finally:
                 stop_event.set()
                 if not dispatcher_task.done():
                     dispatcher_task.cancel()
                 stop_task.cancel()
-                await asyncio.gather(dispatcher_task, stop_task, return_exceptions=True)
+                await asyncio.gather(
+                    dispatcher_task,
+                    sender_task,
+                    stop_task,
+                    return_exceptions=True,
+                )
     finally:
         await engine.dispose()
         logger.info("bot_stopped")

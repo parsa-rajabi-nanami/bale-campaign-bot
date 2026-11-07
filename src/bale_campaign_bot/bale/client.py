@@ -156,6 +156,16 @@ class BaleClient:
             {"chat_id": chat_id, "from_chat_id": from_chat_id, "message_id": message_id},
         )
 
+    async def edit_message_text(self, chat_id: int, message_id: int, text: str) -> Message | bool:
+        """Edit plain progress text; deliberately offers no keyboard argument."""
+        if not 1 <= len(text) <= 4096:
+            raise ValueError("editMessageText text must contain between 1 and 4096 characters")
+        return await self._request(
+            "editMessageText",
+            Message | bool,
+            {"chat_id": chat_id, "message_id": message_id, "text": text},
+        )
+
     async def get_file(self, file_id: str) -> File:
         return await self._request("getFile", File, {"file_id": file_id})
 
@@ -211,7 +221,7 @@ class BaleClient:
                     continue
                 if envelope is not None and not envelope.ok:
                     raise self._api_error(method, envelope, retry_after=hint, rate_limited=True)
-                raise BaleHTTPError(method, response.status_code)
+                raise BaleHTTPError(method, response.status_code, retry_after=hint)
 
             if response.status_code >= 500:
                 if attempt + 1 < self._retry_policy.max_attempts:

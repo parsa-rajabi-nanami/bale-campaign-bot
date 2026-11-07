@@ -121,9 +121,10 @@ async def test_public_start_and_contact_identity_validation(
                 text="/start campaign-42",
             )
         )
-        assert sent[0]["text"] == "به نمونه خوش آمدید"
-        assert "inline_keyboard" in sent[0]["reply_markup"]
-        assert sent[1]["reply_markup"]["keyboard"][0][0]["request_contact"] is True
+        assert sent[0]["text"] == "با عضویت، دریافت پیام را می‌پذیرم."
+        assert sent[1]["text"] == "به نمونه خوش آمدید"
+        assert "inline_keyboard" in sent[1]["reply_markup"]
+        assert sent[2]["reply_markup"]["keyboard"][0][0]["request_contact"] is True
 
         await handlers.handle_message(
             Message(

@@ -77,6 +77,14 @@ def _quiet_adjust(
     return datetime.combine(end_date, end, tzinfo=timezone)
 
 
+def _parse_local_datetime(value: str, timezone: ZoneInfo) -> datetime:
+    local = datetime.strptime(value, "%Y-%m-%d %H:%M").replace(tzinfo=timezone)
+    round_trip = local.astimezone(UTC).astimezone(timezone).replace(tzinfo=None)
+    if round_trip != local.replace(tzinfo=None):
+        raise ValueError("local time does not exist in this timezone")
+    return local
+
+
 class AdminHandlers:
     def __init__(
         self,
@@ -113,6 +121,9 @@ class AdminHandlers:
             configured_admin_ids=self._admin_ids,
         ):
             return False
+
+        if await self._handle_campaign_control(message.chat.id, command):
+            return True
 
         fsm = FSMContext(self._session_factory, user_id=user_id, chat_id=message.chat.id)
         stored = await fsm.get()
@@ -344,8 +355,10 @@ class AdminHandlers:
             elif data.get("awaiting_time") is True:
                 send_now = False
                 try:
-                    naive = datetime.strptime(text, "%Y-%m-%d %H:%M")
-                    schedule = naive.replace(tzinfo=ZoneInfo(self._business.business.timezone))
+                    schedule = _parse_local_datetime(
+                        text,
+                        ZoneInfo(self._business.business.timezone),
+                    )
                     if schedule <= self._clock().astimezone(schedule.tzinfo):
                         raise ValueError
                 except ValueError:
@@ -491,7 +504,37 @@ class AdminHandlers:
             f"ناموفق: {campaign.failed_count}، مسدود: {campaign.blocked_count}"
             for campaign in campaigns
         ]
-        await self._client.send_message(chat_id, "\n".join(rows)[:4096])
+        await self._client.send_message(
+            chat_id,
+            "\n".join(rows)[:3900] + "\nکنترل: /pause_ID ، /resume_ID ، /cancel_ID",
+        )
+
+    async def _handle_campaign_control(self, chat_id: int, command: str) -> bool:
+        control, separator, raw_id = command.partition("_")
+        if not separator or control not in {"/pause", "/resume", "/cancel"}:
+            return False
+        try:
+            campaign_id = int(raw_id)
+            if campaign_id < 1:
+                raise ValueError
+            if control == "/pause":
+                if (await self._campaigns.get(campaign_id)).status != "running":
+                    raise CampaignError("only running campaigns can pause")
+                await self._campaigns.transition(campaign_id, CampaignStatus.PAUSED)
+                reply = "کمپین متوقف شد؛ کارهای در حال اجرا تمام می‌شوند."
+            elif control == "/resume":
+                if (await self._campaigns.get(campaign_id)).status != "paused":
+                    raise CampaignError("only paused campaigns can resume")
+                await self._campaigns.transition(campaign_id, CampaignStatus.RUNNING)
+                reply = "کمپین از سر گرفته شد."
+            else:
+                await self._campaigns.cancel(campaign_id)
+                reply = "کمپین لغو شد و گیرندگان باقی‌مانده رد شدند."
+        except (ValueError, CampaignError):
+            await self._client.send_message(chat_id, fa.CAMPAIGN_STATE_INVALID)
+            return True
+        await self._client.send_message(chat_id, reply)
+        return True
 
     async def _send_audience_help(self, chat_id: int) -> None:
         count = await self._audiences.count()
