@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bale_campaign_bot.db.models import (
@@ -158,6 +158,9 @@ class UpdateRepository:
 
     async def has_processed(self, update_id: int) -> bool:
         return await self._session.get(ProcessedUpdate, update_id) is not None
+
+    async def latest_processed_id(self) -> int | None:
+        return await self._session.scalar(select(func.max(ProcessedUpdate.update_id)))
 
     async def mark_processed(self, update_id: int) -> bool:
         if await self.has_processed(update_id):

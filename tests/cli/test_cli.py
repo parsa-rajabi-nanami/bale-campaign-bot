@@ -33,6 +33,23 @@ def business_answers() -> dict[str, object]:
     }
 
 
+def test_business_wizard_asks_about_optional_phone_linking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answers = iter((True, False, False, False))
+    monkeypatch.setattr(cli, "_ask_yes_no", lambda _label: next(answers))
+    monkeypatch.setattr(
+        cli,
+        "_ask",
+        lambda _label, *, default=None: default or "Demo",
+    )
+
+    config = cli._business_answers()
+
+    business = cast(dict[str, object], config["business"])
+    assert business["phone_linking_enabled"] is True
+
+
 @pytest.mark.asyncio
 async def test_init_validates_token_and_writes_private_files(
     fake_bale_server: respx.MockRouter,

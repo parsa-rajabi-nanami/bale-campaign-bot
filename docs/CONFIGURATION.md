@@ -16,6 +16,7 @@ The bot is single-tenant: one deployment owns one Bale bot and one business YAML
 | `SEND_RATE_PER_SECOND` | `10` | Conservative campaign send-rate starting point; Bale does not publish a stable limit. |
 | `SEND_CONCURRENCY` | `5` | Maximum concurrent campaign sends. |
 | `TIMEZONE` | `Asia/Tehran` | IANA timezone used for operator-facing time. Timestamps are stored in UTC. |
+| `SETUP_CODE_TTL_SECONDS` | `3600` | Lifetime of the private-chat owner claim code; minimum 60 seconds. |
 
 All settings are validated on startup. `ADMIN_IDS` accepts values such as `12345,67890`, not JSON arrays. Database URLs must target SQLite or PostgreSQL; PostgreSQL credentials should be URL-encoded.
 
@@ -25,6 +26,7 @@ Start with [`config/business.example.yaml`](../config/business.example.yaml), co
 
 - `business.name`, `short_description`, `welcome_message`, and `about_text` are required and length-checked.
 - `business.contact` contains optional phone, HTTP(S) website, address, and social URLs.
+- `business.phone_linking_enabled` enables the explicit Bale contact-sharing button. Only contacts whose Bale user ID matches the sender are accepted.
 - `working_hours` and `support_contact` are optional display values.
 - Each `default_menu` button must have a label and exactly one action: `url` or `callback`. Callback data is limited to 64 UTF-8 bytes as required by Bale.
 - `consent_text` and `consent_version` describe the opt-in shown to subscribers. Keep the version stable until consent wording changes.

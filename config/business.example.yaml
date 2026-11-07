@@ -18,6 +18,7 @@ business:
   opt_out_confirmation_text: "عضویت شما لغو شد. برای عضویت دوباره /start را بفرستید."
   footer_text: "لغو عضویت: /stop"
   footer_enabled: false
+  phone_linking_enabled: false
   timezone: "Asia/Tehran"
   locale: "fa"
 campaign_defaults:

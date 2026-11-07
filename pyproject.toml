@@ -36,7 +36,7 @@ dev = [
 ]
 
 [project.scripts]
-bale-campaign-bot = "bale_campaign_bot.cli:main"
+bale-campaign-bot = "bale_campaign_bot.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bale_campaign_bot"]

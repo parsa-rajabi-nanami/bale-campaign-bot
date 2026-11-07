@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BaleModel(BaseModel):
@@ -51,6 +51,47 @@ class MessageId(BaleModel):
     message_id: int
 
 
+class KeyboardButton(BaleModel):
+    text: str
+    request_contact: bool | None = None
+    request_location: bool | None = None
+
+
+class ReplyKeyboardMarkup(BaleModel):
+    keyboard: list[list[KeyboardButton]]
+    resize_keyboard: bool = True
+    one_time_keyboard: bool = False
+
+
+class InlineKeyboardButton(BaleModel):
+    text: str = Field(min_length=1)
+    url: str | None = None
+    callback_data: str | None = None
+
+    @model_validator(mode="after")
+    def validate_action(self) -> InlineKeyboardButton:
+        if (self.url is None) == (self.callback_data is None):
+            raise ValueError("exactly one of url or callback_data must be set")
+        if (
+            self.callback_data is not None
+            and not 1 <= len(self.callback_data.encode("utf-8")) <= 64
+        ):
+            raise ValueError("callback_data must contain between 1 and 64 bytes")
+        return self
+
+
+class InlineKeyboardMarkup(BaleModel):
+    inline_keyboard: list[list[InlineKeyboardButton]]
+
+
+class Contact(BaleModel):
+    phone_number: str
+    first_name: str
+    last_name: str | None = None
+    user_id: int | None = None
+    vcard: str | None = None
+
+
 class Message(BaleModel):
     message_id: int
     date: int
@@ -66,7 +107,7 @@ class Message(BaleModel):
     document: dict[str, Any] | None = None
     video: dict[str, Any] | None = None
     voice: dict[str, Any] | None = None
-    contact: dict[str, Any] | None = None
+    contact: Contact | None = None
     location: dict[str, Any] | None = None
 
 

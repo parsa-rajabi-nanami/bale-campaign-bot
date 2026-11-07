@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     send_rate_per_second: float = 10.0
     send_concurrency: int = 5
     timezone: str = "Asia/Tehran"
+    setup_code_ttl_seconds: int = 3600
 
     @field_validator("bale_bot_token", mode="before")
     @classmethod
@@ -82,6 +83,13 @@ class Settings(BaseSettings):
     def validate_concurrency(cls, value: int) -> int:
         if value < 1:
             raise ValueError("SEND_CONCURRENCY must be at least 1")
+        return value
+
+    @field_validator("setup_code_ttl_seconds")
+    @classmethod
+    def validate_setup_code_ttl(cls, value: int) -> int:
+        if value < 60:
+            raise ValueError("SETUP_CODE_TTL_SECONDS must be at least 60")
         return value
 
     @field_validator("timezone")

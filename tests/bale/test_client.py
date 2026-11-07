@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -14,6 +15,7 @@ from bale_campaign_bot.bale.errors import (
     BaleNetworkError,
     BaleProtocolError,
 )
+from bale_campaign_bot.bale.models import InlineKeyboardButton, InlineKeyboardMarkup
 
 pytestmark = pytest.mark.asyncio
 
@@ -284,6 +286,51 @@ async def test_get_file_and_webhook_info(fake_bale_server: respx.MockRouter) -> 
         info = await client.get_webhook_info()
     assert file.file_path == "photos/a.jpg"
     assert info.url == ""
+
+
+async def test_send_message_serializes_documented_inline_keyboard(
+    fake_bale_server: respx.MockRouter,
+) -> None:
+    route = fake_bale_server.post("sendMessage").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "result": {
+                    "message_id": 50,
+                    "date": 1_700_000_000,
+                    "chat": {"id": 123, "type": "private"},
+                    "text": "Welcome",
+                },
+            },
+        )
+    )
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="About", callback_data="about")],
+            [InlineKeyboardButton(text="Website", url="https://example.com")],
+        ]
+    )
+    async with make_client([]) as client:
+        await client.send_message(123, "Welcome", reply_markup=keyboard)
+    assert route.calls[0].request.read() == (
+        b'{"chat_id":123,"text":"Welcome","reply_markup":{"inline_keyboard":'
+        b'[[{"text":"About","callback_data":"about"}],[{"text":"Website",'
+        b'"url":"https://example.com"}]]}}'
+    )
+
+
+async def test_callback_acknowledgment_is_best_effort(fake_bale_server: respx.MockRouter) -> None:
+    def respond(request: httpx.Request) -> httpx.Response:
+        query_id = json.loads(request.content)["callback_query_id"]
+        if query_id == "q1":
+            return httpx.Response(200, json={"ok": True, "result": True})
+        return httpx.Response(400, json={"ok": False, "description": "unsupported"})
+
+    fake_bale_server.post("answerCallbackQuery").mock(side_effect=respond)
+    async with make_client([]) as client:
+        assert await client.answer_callback_query("q1", "Done")
+        assert not await client.answer_callback_query("q2")
 
 
 @pytest.mark.parametrize(

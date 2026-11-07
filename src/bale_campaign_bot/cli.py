@@ -84,6 +84,9 @@ def _business_answers() -> dict[str, object]:
         "support_contact": _ask("Support contact (optional) / راه ارتباطی پشتیبانی"),
         "consent_text": _ask("Opt-in consent text / متن رضایت برای عضویت"),
         "consent_version": _ask("Consent text version / نسخه متن رضایت", default="1"),
+        "phone_linking_enabled": _ask_yes_no(
+            "Allow subscribers to share their phone number? / دریافت شماره با رضایت کاربر؟"
+        ),
         "opt_out_confirmation_text": _ask(
             "Opt-out confirmation / پیام تأیید لغو عضویت",
             default="عضویت شما لغو شد. برای عضویت دوباره /start را بفرستید.",

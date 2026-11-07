@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -80,7 +81,16 @@ class Admin(TimestampMixin, Base):
 
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     role: Mapped[str] = mapped_column(String(20), default="admin", nullable=False)
-    __table_args__ = (CheckConstraint("role IN ('owner', 'admin')", name="ck_admin_role"),)
+    __table_args__ = (
+        CheckConstraint("role IN ('owner', 'admin')", name="ck_admin_role"),
+        Index(
+            "uq_single_admin_owner",
+            "role",
+            unique=True,
+            sqlite_where=text("role = 'owner'"),
+            postgresql_where=text("role = 'owner'"),
+        ),
+    )
 
 
 class ConversationState(TimestampMixin, Base):

@@ -90,6 +90,7 @@ class BusinessProfile(BusinessModel):
     opt_out_confirmation_text: str = Field(min_length=1, max_length=1000)
     footer_text: str | None = Field(default=None, max_length=1000)
     footer_enabled: bool = False
+    phone_linking_enabled: bool = False
     timezone: str = "Asia/Tehran"
     locale: Literal["fa", "en"] = "fa"
 

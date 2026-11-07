@@ -17,6 +17,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from bale_campaign_bot.bale.errors import (
     BaleAPIError,
+    BaleError,
     BaleHTTPError,
     BaleNetworkError,
     BaleProtocolError,
@@ -24,8 +25,10 @@ from bale_campaign_bot.bale.errors import (
 from bale_campaign_bot.bale.models import (
     ApiEnvelope,
     File,
+    InlineKeyboardMarkup,
     Message,
     MessageId,
+    ReplyKeyboardMarkup,
     Update,
     User,
     WebhookInfo,
@@ -132,10 +135,19 @@ class BaleClient:
             request_timeout=request_timeout,
         )
 
-    async def send_message(self, chat_id: int, text: str) -> Message:
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        *,
+        reply_markup: InlineKeyboardMarkup | ReplyKeyboardMarkup | None = None,
+    ) -> Message:
         if not 1 <= len(text) <= 4096:
             raise ValueError("sendMessage text must contain between 1 and 4096 characters")
-        return await self._request("sendMessage", Message, {"chat_id": chat_id, "text": text})
+        params: dict[str, object] = {"chat_id": chat_id, "text": text}
+        if reply_markup is not None:
+            params["reply_markup"] = reply_markup.model_dump(mode="json", exclude_none=True)
+        return await self._request("sendMessage", Message, params)
 
     async def copy_message(self, chat_id: int, from_chat_id: int, message_id: int) -> MessageId:
         return await self._request(
@@ -158,6 +170,16 @@ class BaleClient:
 
     async def get_webhook_info(self) -> WebhookInfo:
         return await self._request("getWebhookInfo", WebhookInfo)
+
+    async def answer_callback_query(self, callback_query_id: str, text: str | None = None) -> bool:
+        """Best-effort callback acknowledgment; the method's support can vary."""
+        params: dict[str, object] = {"callback_query_id": callback_query_id}
+        if text is not None:
+            params["text"] = text
+        try:
+            return await self._request("answerCallbackQuery", bool, params)
+        except BaleError:
+            return False
 
     async def _request(
         self,
