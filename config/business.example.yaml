@@ -1,0 +1,29 @@
+business:
+  name: "کسب‌وکار نمونه"
+  short_description: "معرفی کوتاه کسب‌وکار"
+  welcome_message: "به {business_name} خوش آمدید. برای دریافت پیام‌های تبلیغاتی، رضایت خود را با شروع گفتگو اعلام کنید. برای لغو عضویت /stop را بفرستید."
+  about_text: "درباره کسب‌وکار"
+  contact:
+    phone: "+982100000000"
+    website: "https://example.com"
+    address: "تهران"
+    social_links: []
+  working_hours: "شنبه تا چهارشنبه، ۹ تا ۱۷"
+  support_contact: "@example_support"
+  default_menu:
+    - label: "وب‌سایت"
+      url: "https://example.com"
+  consent_text: "با عضویت، دریافت پیام‌های اطلاع‌رسانی و تبلیغاتی را می‌پذیرم. برای لغو هر زمان /stop را بفرستید."
+  consent_version: "1"
+  opt_out_confirmation_text: "عضویت شما لغو شد. برای عضویت دوباره /start را بفرستید."
+  footer_text: "لغو عضویت: /stop"
+  footer_enabled: false
+  timezone: "Asia/Tehran"
+  locale: "fa"
+campaign_defaults:
+  send_rate_per_second: 10
+  concurrency: 5
+  quiet_hours:
+    enabled: false
+    start: "22:00"
+    end: "08:00"
