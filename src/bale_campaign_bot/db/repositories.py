@@ -98,6 +98,35 @@ class SubscriberRepository:
         )
         return list(result)
 
+    async def find_linked_phones(self, phone_numbers: set[str]) -> set[str]:
+        if not phone_numbers:
+            return set()
+        result = await self._session.scalars(
+            select(Subscriber.phone_e164).where(Subscriber.phone_e164.in_(phone_numbers))
+        )
+        return {phone for phone in result if phone is not None}
+
+    async def export_page(
+        self,
+        *,
+        after_id: int = 0,
+        limit: int = 1000,
+        include_inactive: bool = False,
+    ) -> list[tuple[int, int, str, str | None, str | None, bool, str | None]]:
+        query = select(
+            Subscriber.id,
+            Subscriber.chat_id,
+            Subscriber.first_name,
+            Subscriber.last_name,
+            Subscriber.username,
+            Subscriber.is_active,
+            Subscriber.phone_e164,
+        ).where(Subscriber.id > after_id)
+        if not include_inactive:
+            query = query.where(Subscriber.is_active.is_(True))
+        result = await self._session.execute(query.order_by(Subscriber.id).limit(limit))
+        return [(row[0], row[1], row[2], row[3], row[4], row[5], row[6]) for row in result]
+
 
 class AdminRepository:
     def __init__(self, session: AsyncSession, *, clock: Clock = _utc_now) -> None:

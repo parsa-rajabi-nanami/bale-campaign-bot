@@ -10,9 +10,11 @@ import pytest
 import respx
 
 from bale_campaign_bot import cli
-from bale_campaign_bot.bale.models import User, WebhookInfo
+from bale_campaign_bot.bale.models import Chat, User, WebhookInfo
 from bale_campaign_bot.config.business import load_business_config
 from bale_campaign_bot.config.settings import Settings
+from bale_campaign_bot.db.session import create_engine, create_session_factory
+from bale_campaign_bot.services.subscribers import SubscriberService
 
 
 def business_answers() -> dict[str, object]:
@@ -142,3 +144,37 @@ async def test_doctor_checks_local_db_and_bale_api(
     assert result == 0
     assert "[OK] migrations" in output.getvalue()
     assert "long polling" in output.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_import_contacts_reports_only_and_export_is_private(
+    tmp_path: Path,
+) -> None:
+    from io import StringIO
+
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'contacts.db'}"
+    await asyncio.to_thread(cli.run_migrations, database_url)
+    engine = create_engine(database_url)
+    try:
+        subscribers = SubscriberService(create_session_factory(engine))
+        await subscribers.start(
+            user=User(id=901, is_bot=False, first_name="=2+2"),
+            chat=Chat(id=901, type="private"),
+            source=None,
+            consent_version="v1",
+        )
+        await subscribers.link_phone(901, "09123456789")
+    finally:
+        await engine.dispose()
+    settings = Settings(_env_file=None, database_url=database_url)
+    input_path = tmp_path / "contacts.csv"
+    input_path.write_text("phone\n09123456789\n+989876543210\n", encoding="utf-8")
+    output = StringIO()
+    assert await cli.run_import_contacts(settings, input_path, stream=output) == 0
+    assert "Matched linked subscribers: 1" in output.getvalue()
+    assert "unmatched (cannot be messaged): 1" in output.getvalue()
+
+    export_path = tmp_path / "export.csv"
+    assert await cli.run_export_subscribers(settings, export_path) == 0
+    assert stat.S_IMODE(export_path.stat().st_mode) == 0o600
+    assert "901,'=2+2" in export_path.read_text(encoding="utf-8")

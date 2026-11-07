@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import signal
 import sys
+from urllib.parse import unquote, urlsplit
 
 import structlog
 from pydantic import ValidationError
@@ -14,6 +15,7 @@ from bale_campaign_bot.bot.dispatcher import UpdateDispatcher
 from bale_campaign_bot.bot.handlers.admin import AdminHandlers
 from bale_campaign_bot.bot.handlers.public import PublicHandlers
 from bale_campaign_bot.bot.router import BotRouter
+from bale_campaign_bot.bot.webhook import BaleWebhookApp
 from bale_campaign_bot.config.business import BusinessConfigError, load_business_config
 from bale_campaign_bot.config.settings import Settings
 from bale_campaign_bot.db.session import create_engine, create_session_factory, ensure_sqlite_parent
@@ -71,27 +73,63 @@ async def _serve(settings: Settings) -> None:
                 rate_per_second=settings.send_rate_per_second,
                 concurrency=settings.send_concurrency,
             )
-            dispatcher_task = asyncio.create_task(
-                dispatcher.run(stop_event), name="bale-update-poller"
-            )
+            webhook_server = None
+            if settings.update_mode == "webhook":
+                import uvicorn
+
+                public_url = settings.webhook_public_url
+                path_secret = settings.webhook_path_secret
+                if public_url is None or path_secret is None:
+                    raise RuntimeError("validated webhook configuration is missing")
+                webhook_url = f"{public_url.rstrip('/')}/{path_secret.get_secret_value()}"
+                if not await client.set_webhook(webhook_url):
+                    raise RuntimeError("Bale rejected webhook registration")
+                asgi_app = BaleWebhookApp(
+                    dispatcher,
+                    route_path=(
+                        unquote(urlsplit(public_url).path).rstrip("/")
+                        + f"/{path_secret.get_secret_value()}"
+                    ),
+                    max_body_bytes=settings.webhook_max_body_bytes,
+                )
+                webhook_config = uvicorn.Config(
+                    asgi_app,
+                    host=settings.webhook_bind_host,
+                    port=settings.webhook_bind_port,
+                    access_log=False,
+                    log_config=None,
+                    lifespan="on",
+                )
+                webhook_server = uvicorn.Server(webhook_config)
+                intake_task = asyncio.create_task(
+                    webhook_server.serve(), name="bale-webhook-server"
+                )
+                logger.info("webhook_intake_started", bind_port=settings.webhook_bind_port)
+            else:
+                await client.set_webhook("")
+                intake_task = asyncio.create_task(
+                    dispatcher.run(stop_event), name="bale-update-poller"
+                )
             sender_task = asyncio.create_task(sender.run(stop_event), name="campaign-sender")
             stop_task = asyncio.create_task(stop_event.wait(), name="shutdown-signal")
             try:
                 done, _ = await asyncio.wait(
-                    {dispatcher_task, sender_task, stop_task},
+                    {intake_task, sender_task, stop_task},
                     return_when=asyncio.FIRST_COMPLETED,
                 )
-                if dispatcher_task in done:
-                    dispatcher_task.result()
+                if intake_task in done:
+                    intake_task.result()
                 if sender_task in done:
                     sender_task.result()
             finally:
                 stop_event.set()
-                if not dispatcher_task.done():
-                    dispatcher_task.cancel()
+                if webhook_server is not None:
+                    webhook_server.should_exit = True
+                elif not intake_task.done():
+                    intake_task.cancel()
                 stop_task.cancel()
                 await asyncio.gather(
-                    dispatcher_task,
+                    intake_task,
                     sender_task,
                     stop_task,
                     return_exceptions=True,

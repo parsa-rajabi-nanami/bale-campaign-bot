@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a reproducible defect
+body:
+  - type: markdown
+    attributes:
+      value: Do not include bot tokens, setup codes, phone numbers, subscriber data, or campaign bodies.
+  - type: input
+    id: revision
+    attributes:
+      label: Revision
+      description: Commit or release identifier
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true

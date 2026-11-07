@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import getpass
 import os
 import sys
@@ -27,9 +28,12 @@ from bale_campaign_bot.config.business import (
     validate_business_config,
 )
 from bale_campaign_bot.config.settings import Settings
-from bale_campaign_bot.db.session import create_engine, ensure_sqlite_parent
+from bale_campaign_bot.db.repositories import SubscriberRepository
+from bale_campaign_bot.db.session import create_engine, create_session_factory, ensure_sqlite_parent
+from bale_campaign_bot.services.contacts import ContactImportService
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MAX_CONTACT_FILE_BYTES = 1_000_000
 
 
 def _ask(label: str, *, default: str | None = None) -> str:
@@ -175,6 +179,12 @@ async def run_init(
             f"SEND_RATE_PER_SECOND={validated.campaign_defaults.send_rate_per_second}",
             f"SEND_CONCURRENCY={validated.campaign_defaults.concurrency}",
             f"TIMEZONE={validated.business.timezone}",
+            "UPDATE_MODE=polling",
+            "WEBHOOK_PUBLIC_URL=",
+            "WEBHOOK_PATH_SECRET=",
+            "WEBHOOK_BIND_HOST=0.0.0.0",
+            "WEBHOOK_BIND_PORT=8080",
+            "WEBHOOK_MAX_BODY_BYTES=1000000",
             "",
         )
     )
@@ -215,6 +225,12 @@ def _safe_settings_errors(error: ValidationError) -> str:
         for item in error.errors(include_input=False, include_context=False, include_url=False)
     ]
     return "\n".join(details)
+
+
+def _csv_safe_cell(value: object) -> object:
+    if isinstance(value, str) and value.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
 
 
 async def run_doctor(settings: Settings, *, stream: TextIO = sys.stdout) -> int:
@@ -286,9 +302,42 @@ async def run_doctor(settings: Settings, *, stream: TextIO = sys.stdout) -> int:
                 results.append(True)
                 try:
                     webhook = await client.get_webhook_info()
-                    mode = "webhook configured" if webhook.url else "long polling (no webhook URL)"
-                    _print_check(stream, "update intake", True, mode)
-                    results.append(True)
+                    if settings.update_mode == "webhook":
+                        secret = settings.webhook_path_secret
+                        public_url = settings.webhook_public_url
+                        expected = (
+                            f"{public_url.rstrip('/')}/{secret.get_secret_value()}"
+                            if public_url is not None and secret is not None
+                            else ""
+                        )
+                        configured = webhook.url == expected
+                        detail = (
+                            "configured webhook matches settings"
+                            if configured
+                            else "webhook URL differs from settings"
+                        )
+                        _print_check(stream, "update intake", configured, detail)
+                        if not configured:
+                            print(
+                                "Fix: check WEBHOOK_PUBLIC_URL/WEBHOOK_PATH_SECRET and "
+                                "restart the bot.",
+                                file=stream,
+                            )
+                        results.append(configured)
+                    else:
+                        polling = not webhook.url
+                        detail = (
+                            "long polling (no webhook URL)"
+                            if polling
+                            else "a webhook is still configured"
+                        )
+                        _print_check(stream, "update intake", polling, detail)
+                        if not polling:
+                            print(
+                                "Fix: restart in UPDATE_MODE=polling; startup clears the webhook.",
+                                file=stream,
+                            )
+                        results.append(polling)
                 except BaleError as exc:
                     _print_check(
                         stream, "update intake", False, f"{type(exc).__name__} from {exc.method}"
@@ -303,12 +352,91 @@ async def run_doctor(settings: Settings, *, stream: TextIO = sys.stdout) -> int:
     return 0 if all(results) else 1
 
 
+async def run_import_contacts(
+    settings: Settings, source: Path, *, stream: TextIO = sys.stdout
+) -> int:
+    try:
+        if source.stat().st_size > MAX_CONTACT_FILE_BYTES:
+            raise ValueError(f"file exceeds the {MAX_CONTACT_FILE_BYTES} byte limit")
+        content = source.read_text(encoding="utf-8-sig")
+        engine = create_engine(settings.database_url)
+        try:
+            report = await ContactImportService(create_session_factory(engine)).match(content)
+        finally:
+            await engine.dispose()
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        print(f"Contact import failed: {exc}", file=stream)
+        return 1
+    print(
+        f"Matched linked subscribers: {report.matched}; unmatched (cannot be messaged): "
+        f"{report.unmatched}; invalid: {report.invalid}",
+        file=stream,
+    )
+    return 0
+
+
+async def run_export_subscribers(
+    settings: Settings,
+    destination: Path,
+    *,
+    include_inactive: bool = False,
+) -> int:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", dir=destination.parent, text=True
+    )
+    temporary_path = Path(temporary_name)
+    os.fchmod(descriptor, 0o600)
+    engine = create_engine(settings.database_url)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as output:
+            writer = csv.writer(output)
+            writer.writerow(
+                ("chat_id", "first_name", "last_name", "username", "is_active", "phone_e164")
+            )
+            last_id = 0
+            session_factory = create_session_factory(engine)
+            while True:
+                async with session_factory() as session:
+                    rows = await SubscriberRepository(session).export_page(
+                        after_id=last_id,
+                        limit=1000,
+                        include_inactive=include_inactive,
+                    )
+                if not rows:
+                    break
+                for subscriber_id, *values in rows:
+                    writer.writerow([_csv_safe_cell(value) for value in values])
+                    last_id = subscriber_id
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary_path, destination)
+        os.chmod(destination, 0o600)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    finally:
+        await engine.dispose()
+    print(f"Exported subscriber records to {destination} (mode 0600).")
+    print("Phone numbers cannot be used to message people who have not started the bot.")
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="bale-campaign-bot")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("init", help="validate the bot token and create configuration")
     subparsers.add_parser("doctor", help="check configuration, database, migrations, and Bale API")
     subparsers.add_parser("migrate", help="apply database migrations to head")
+    import_parser = subparsers.add_parser(
+        "import-contacts", help="match a CSV/text phone list to linked opt-in subscribers"
+    )
+    import_parser.add_argument("file", type=Path)
+    export_parser = subparsers.add_parser("export", help="export subscriber records as private CSV")
+    export_parser.add_argument("file", type=Path)
+    export_parser.add_argument(
+        "--include-inactive", action="store_true", help="include unsubscribed records"
+    )
     return parser
 
 
@@ -330,6 +458,16 @@ def main(argv: list[str] | None = None) -> int:
         run_migrations(settings.database_url)
         print("Database is migrated to head.")
         return 0
+    if args.command == "import-contacts":
+        return asyncio.run(run_import_contacts(settings, args.file))
+    if args.command == "export":
+        return asyncio.run(
+            run_export_subscribers(
+                settings,
+                args.file,
+                include_inactive=args.include_inactive,
+            )
+        )
     return 2
 
 

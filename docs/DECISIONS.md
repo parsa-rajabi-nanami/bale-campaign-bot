@@ -6,6 +6,8 @@ The implementation follows the requested stack: Python 3.12, `uv`, an async hand
 
 SQLAlchemy's `asyncio` extra is required because its async engine depends on `greenlet`; this is declared explicitly. SQLite foreign-key enforcement is enabled on each connection so the migration's cascade/restrict rules work locally as they do in PostgreSQL.
 
+Uvicorn is included as a small optional-runtime ASGI server for the requested webhook mode. Long polling remains the default and requires no inbound port. The webhook adapter itself is framework-free and uses only the ASGI protocol.
+
 ## Bale-specific choices
 
 - Broadcast payloads use `copyMessage` to preserve the source message's Bale formatting and media. The API request is not assumed to support attaching inline CTA markup to a copied message; CTA delivery is a separate message.

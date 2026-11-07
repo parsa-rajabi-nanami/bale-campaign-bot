@@ -5,9 +5,10 @@ from __future__ import annotations
 import math
 from functools import cached_property
 from typing import Literal
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +31,12 @@ class Settings(BaseSettings):
     send_concurrency: int = 5
     timezone: str = "Asia/Tehran"
     setup_code_ttl_seconds: int = 3600
+    update_mode: Literal["polling", "webhook"] = "polling"
+    webhook_public_url: str | None = None
+    webhook_path_secret: SecretStr | None = None
+    webhook_bind_host: str = "0.0.0.0"
+    webhook_bind_port: int = 8080
+    webhook_max_body_bytes: int = 1_000_000
 
     @field_validator("bale_bot_token", mode="before")
     @classmethod
@@ -100,6 +107,43 @@ class Settings(BaseSettings):
         except ZoneInfoNotFoundError:
             raise ValueError(f"Unknown IANA timezone: {value}") from None
         return value
+
+    @field_validator("webhook_bind_port")
+    @classmethod
+    def validate_webhook_port(cls, value: int) -> int:
+        if not 1 <= value <= 65535:
+            raise ValueError("WEBHOOK_BIND_PORT must be between 1 and 65535")
+        return value
+
+    @field_validator("webhook_max_body_bytes")
+    @classmethod
+    def validate_webhook_body_limit(cls, value: int) -> int:
+        if not 1024 <= value <= 10_000_000:
+            raise ValueError("WEBHOOK_MAX_BODY_BYTES must be between 1024 and 10000000")
+        return value
+
+    @model_validator(mode="after")
+    def validate_webhook_configuration(self) -> Settings:
+        if self.update_mode != "webhook":
+            return self
+        if self.webhook_public_url is None or self.webhook_path_secret is None:
+            raise ValueError("webhook mode requires WEBHOOK_PUBLIC_URL and WEBHOOK_PATH_SECRET")
+        parsed = urlsplit(self.webhook_public_url)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.port not in (None, 443, 88)
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("WEBHOOK_PUBLIC_URL must be HTTPS on port 443 or 88 without query")
+        secret = self.webhook_path_secret.get_secret_value()
+        if len(secret) < 32 or any(
+            character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+            for character in secret
+        ):
+            raise ValueError("WEBHOOK_PATH_SECRET must be a URL-safe random value of 32+ chars")
+        return self
 
     @cached_property
     def admin_id_set(self) -> frozenset[int]:

@@ -17,6 +17,12 @@ The bot is single-tenant: one deployment owns one Bale bot and one business YAML
 | `SEND_CONCURRENCY` | `5` | Maximum concurrent campaign sends. |
 | `TIMEZONE` | `Asia/Tehran` | IANA timezone used for operator-facing time. Timestamps are stored in UTC. |
 | `SETUP_CODE_TTL_SECONDS` | `3600` | Lifetime of the private-chat owner claim code; minimum 60 seconds. |
+| `UPDATE_MODE` | `polling` | `polling` works without public ingress. Set to `webhook` only behind HTTPS. |
+| `WEBHOOK_PUBLIC_URL` | unset | Public HTTPS base URL, without a query string; webhook mode requires it. Bale supports ports 443 and 88. |
+| `WEBHOOK_PATH_SECRET` | unset | Random URL-safe secret with at least 32 characters. It is appended as the webhook path; do not publish it. |
+| `WEBHOOK_BIND_HOST` | `0.0.0.0` | Local ASGI bind host. Keep the port private behind a TLS reverse proxy. |
+| `WEBHOOK_BIND_PORT` | `8080` | Local ASGI port; the public reverse proxy must expose Bale-supported HTTPS port 443 or 88. |
+| `WEBHOOK_MAX_BODY_BYTES` | `1000000` | Maximum webhook request body; accepted range is 1 KiB–10 MB. |
 
 All settings are validated on startup. `ADMIN_IDS` accepts values such as `12345,67890`, not JSON arrays. Database URLs must target SQLite or PostgreSQL; PostgreSQL credentials should be URL-encoded.
 
@@ -40,13 +46,13 @@ The admin wizard previews by copying the original message, accepts an all-active
 
 The sender uses a database lease so only one process schedules and sends campaigns at a time. It claims bounded recipient batches, adapts its global rate after rate-limit responses, and retries transient network/5xx failures up to five recipient attempts. Choose a low starting `SEND_RATE_PER_SECOND`; Bale publishes no stable throughput guarantee. Pause, resume, and cancel campaigns in the private admin chat with `/pause_ID`, `/resume_ID`, and `/cancel_ID` using the ID shown by «کمپین‌ها».
 
-## Campaign delivery
-
-The admin wizard previews by copying the original message, accepts an all-active or tag-filtered audience, and records scheduled campaigns in UTC after interpreting the entered time in the business timezone. Quiet-hours selections move forward to the next allowed time. CTA buttons and the optional business footer are sent as separate follow-up messages because Bale does not document a `copyMessage` keyboard override.
-
-The sender uses a database lease so only one process schedules and sends campaigns at a time. It claims bounded recipient batches, adapts its global rate after rate-limit responses, and retries transient network/5xx failures up to five recipient attempts. Choose a low starting `SEND_RATE_PER_SECOND`; Bale publishes no stable throughput guarantee. Pause, resume, and cancel campaigns in the private admin chat with `/pause_ID`, `/resume_ID`, and `/cancel_ID` using the ID shown by «کمپین‌ها».
-
 Run `python -m bale_campaign_bot.cli doctor` after editing. Validation errors include an English field path and Persian/English error heading.
+
+## Contact matching and export
+
+`python -m bale_campaign_bot.cli import-contacts contacts.csv` accepts a UTF-8 CSV/TXT file up to 1 MB and 50,000 rows. It matches Iranian mobile numbers against numbers subscribers voluntarily linked after `/start`. It reports matched, unmatched, and invalid counts; repeated valid numbers are counted once. Unmatched numbers cannot be messaged; this command never creates subscribers or sends messages. The private admin `/import` flow accepts the same file types and limits.
+
+`python -m bale_campaign_bot.cli export subscribers.csv` exports active subscriber records with file mode `0600`. Add `--include-inactive` to include opted-out history. Store exports as sensitive personal data and delete them when no longer needed.
 
 ## Onboarding
 

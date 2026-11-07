@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a focused improvement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Product constraints
+      options:
+        - label: This preserves explicit opt-in and immediate opt-out.
+          required: true
+        - label: This does not assume undocumented Telegram/Bale parity.
+          required: true

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bale_campaign_bot.bale.client import BaleClient
 from bale_campaign_bot.bale.errors import BaleError
+from bale_campaign_bot.bale.models import Update
 from bale_campaign_bot.bot.router import BotRouter
 from bale_campaign_bot.db.repositories import UpdateRepository
 
@@ -34,6 +35,7 @@ class UpdateDispatcher:
         self._session_factory = session_factory
         self._poll_timeout = poll_timeout
         self._sleep = sleep
+        self._dispatch_lock = asyncio.Lock()
 
     async def run(self, stop_event: asyncio.Event) -> None:
         async with self._session_factory() as session:
@@ -62,10 +64,17 @@ class UpdateDispatcher:
             for update in updates:
                 if stop_event.is_set():
                     return
-                async with self._session_factory() as session:
-                    processed = await UpdateRepository(session).has_processed(update.update_id)
-                if not processed:
-                    await self._router.dispatch(update)
-                    async with self._session_factory() as session, session.begin():
-                        await UpdateRepository(session).mark_processed(update.update_id)
+                await self.dispatch_update(update)
                 offset = max(offset or 0, update.update_id + 1)
+
+    async def dispatch_update(self, update: Update) -> bool:
+        """Deduplicate and route one typed update; returns false for a known duplicate."""
+        async with self._dispatch_lock:
+            async with self._session_factory() as session:
+                processed = await UpdateRepository(session).has_processed(update.update_id)
+            if processed:
+                return False
+            await self._router.dispatch(update)
+            async with self._session_factory() as session, session.begin():
+                await UpdateRepository(session).mark_processed(update.update_id)
+            return True

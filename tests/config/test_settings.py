@@ -47,3 +47,31 @@ def test_settings_reject_invalid_database_and_token_values() -> None:
         Settings(_env_file=None, bale_bot_token="token with spaces")
     with pytest.raises(ValidationError, match="greater than zero"):
         Settings(_env_file=None, send_rate_per_second=0)
+
+
+def test_webhook_settings_require_https_and_long_url_safe_secret() -> None:
+    assert (
+        Settings(
+            _env_file=None,
+            update_mode="webhook",
+            webhook_public_url="https://bot.example.test:443/incoming",
+            webhook_path_secret="x" * 40,
+        ).webhook_bind_port
+        == 8080
+    )
+    with pytest.raises(ValidationError, match="HTTPS"):
+        Settings(
+            _env_file=None,
+            update_mode="webhook",
+            webhook_public_url="http://bot.example.test",
+            webhook_path_secret="x" * 40,
+        )
+    with pytest.raises(ValidationError, match="URL-safe random value"):
+        Settings(
+            _env_file=None,
+            update_mode="webhook",
+            webhook_public_url="https://bot.example.test",
+            webhook_path_secret="short",
+        )
+    with pytest.raises(ValidationError, match="requires WEBHOOK_PUBLIC_URL"):
+        Settings(_env_file=None, update_mode="webhook")

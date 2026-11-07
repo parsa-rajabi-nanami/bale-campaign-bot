@@ -168,6 +168,21 @@ async def test_edit_message_text_never_sends_keyboard(
     assert b"reply_markup" not in payload
 
 
+async def test_download_file_uses_file_endpoint_and_enforces_size_limit() -> None:
+    with respx.mock(base_url="https://tapi.bale.ai") as file_server:
+        route = file_server.get("/file/botTEST_TOKEN/contacts/list.csv").mock(
+            return_value=httpx.Response(200, content=b"phone\n")
+        )
+        async with make_client([]) as client:
+            content = await client.download_file("contacts/list.csv", max_bytes=100)
+            assert content == b"phone\n"
+            with pytest.raises(ValueError, match="byte limit"):
+                await client.download_file("contacts/list.csv", max_bytes=2)
+            with pytest.raises(ValueError, match="invalid Bale file path"):
+                await client.download_file("../secrets", max_bytes=100)
+        assert route.call_count == 2
+
+
 async def test_network_failure_retries_without_exposing_token(
     fake_bale_server: respx.MockRouter,
 ) -> None:

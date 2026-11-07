@@ -20,6 +20,7 @@ dependencies = [
   "PyYAML>=6.0.2,<7",
   "SQLAlchemy[asyncio]>=2.0.36,<3",
   "structlog>=24.4,<26",
+  "uvicorn>=0.34,<1",
 ]
 
 [dependency-groups]
@@ -63,7 +64,7 @@ show_error_codes = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["alembic.*", "asyncpg.*", "respx.*", "yaml.*"]
+module = ["alembic.*", "asyncpg.*", "respx.*", "uvicorn.*", "yaml.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]

@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, TypeVar
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 from pydantic import TypeAdapter, ValidationError
@@ -168,6 +168,39 @@ class BaleClient:
 
     async def get_file(self, file_id: str) -> File:
         return await self._request("getFile", File, {"file_id": file_id})
+
+    async def download_file(self, file_path: str, *, max_bytes: int) -> bytes:
+        """Download a Bale file path without exposing the token or buffering unbounded data."""
+        segments = file_path.split("/")
+        if (
+            max_bytes < 1
+            or not segments
+            or any(segment in {"", ".", ".."} for segment in segments)
+            or "\\" in file_path
+        ):
+            raise ValueError("invalid Bale file path or byte limit")
+        quoted_path = "/".join(quote(segment, safe="-_.~") for segment in segments)
+        url = f"https://tapi.bale.ai/file/bot{self._token}/{quoted_path}"
+        content = bytearray()
+        try:
+            async with self._http.stream("GET", url) as response:
+                if not response.is_success:
+                    raise BaleHTTPError("downloadFile", response.status_code)
+                declared_size = response.headers.get("content-length")
+                if declared_size is not None:
+                    try:
+                        exceeds_limit = int(declared_size) > max_bytes
+                    except ValueError:
+                        exceeds_limit = False
+                    if exceeds_limit:
+                        raise ValueError("Bale file exceeds configured byte limit")
+                async for chunk in response.aiter_bytes():
+                    if len(content) + len(chunk) > max_bytes:
+                        raise ValueError("Bale file exceeds configured byte limit")
+                    content.extend(chunk)
+        except httpx.RequestError:
+            raise BaleNetworkError("downloadFile", 1) from None
+        return bytes(content)
 
     async def set_webhook(self, url: str) -> bool:
         if url:

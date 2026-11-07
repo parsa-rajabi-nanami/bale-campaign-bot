@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bale_campaign_bot.bale.client import BaleClient
+from bale_campaign_bot.bale.errors import BaleError
 from bale_campaign_bot.bale.models import Message
 from bale_campaign_bot.bot.fsm import FSMContext
 from bale_campaign_bot.bot.handlers.public import parse_command
@@ -27,6 +28,9 @@ from bale_campaign_bot.db.repositories import AdminRepository
 from bale_campaign_bot.services.admins import AdminBootstrapService, ClaimStatus
 from bale_campaign_bot.services.audiences import AudienceError, AudienceService
 from bale_campaign_bot.services.campaigns import CampaignError, CampaignService, CampaignStatus
+from bale_campaign_bot.services.contacts import ContactImportService
+
+_MAX_CONTACT_UPLOAD_BYTES = 1_000_000
 
 Clock = Callable[[], datetime]
 _MENU_STATE = "campaign"
@@ -104,6 +108,7 @@ class AdminHandlers:
         self._clock = clock
         self._audiences = AudienceService(session_factory)
         self._campaigns = CampaignService(session_factory, clock=clock)
+        self._contacts = ContactImportService(session_factory)
 
     async def handle_message(self, message: Message) -> bool:
         """Handle an admin update; return false when public handlers may process it."""
@@ -143,6 +148,9 @@ class AdminHandlers:
                 await fsm.clear()
                 await self._send_menu(message.chat.id, "فرایند کمپین لغو شد.")
                 return True
+            if state == "contacts_wait_file":
+                await self._continue_contact_import(message, fsm)
+                return True
             if command == "/test" and "campaign_id" in data:
                 await self._send_test(message, data)
                 return True
@@ -159,6 +167,15 @@ class AdminHandlers:
                 message.chat.id,
                 "پیام کمپین را بفرستید (متن، عکس، ویدیو، فایل، صدا یا پیام پشتیبانی‌شده).\n"
                 "برای لغو، «لغو» را بفرستید.",
+            )
+            return True
+        if command == "/import":
+            await fsm.set("contacts_wait_file")
+            await self._client.send_message(
+                message.chat.id,
+                "فایل CSV یا TXT شماره‌ها را به‌صورت فایل بفرستید (حداکثر ۱ مگابایت و "
+                "۵۰هزار ردیف). شماره‌های نامرتبط فقط گزارش می‌شوند و قابل پیام نیستند؛ "
+                "این ابزار کسی را عضو نمی‌کند. برای لغو /cancel را بفرستید.",
             )
             return True
         if command in {"/campaigns"} or text == fa.ADMIN_CAMPAIGNS:
@@ -184,6 +201,51 @@ class AdminHandlers:
             )
             return True
         return False
+
+    async def _continue_contact_import(self, message: Message, fsm: FSMContext) -> None:
+        document = message.document
+        if document is None or not isinstance(document.get("file_id"), str):
+            await self._client.send_message(
+                message.chat.id,
+                "لطفاً یک فایل CSV یا TXT بفرستید؛ برای لغو /cancel را بفرستید.",
+            )
+            return
+        file_name = str(document.get("file_name", "")).casefold()
+        mime_type = str(document.get("mime_type", "")).casefold()
+        if not file_name.endswith((".csv", ".txt")) and mime_type not in {
+            "text/csv",
+            "text/plain",
+            "application/csv",
+        }:
+            await self._client.send_message(message.chat.id, "فقط فایل CSV یا TXT پذیرفته می‌شود.")
+            return
+        raw_size = document.get("file_size")
+        if isinstance(raw_size, int) and raw_size > _MAX_CONTACT_UPLOAD_BYTES:
+            await self._client.send_message(message.chat.id, "حجم فایل بیشتر از ۱ مگابایت است.")
+            return
+        try:
+            file_info = await self._client.get_file(str(document["file_id"]))
+            if file_info.file_path is None:
+                raise ValueError("Bale did not provide a file path")
+            content = await self._client.download_file(
+                file_info.file_path,
+                max_bytes=_MAX_CONTACT_UPLOAD_BYTES,
+            )
+            report = await self._contacts.match(content.decode("utf-8-sig"))
+        except (BaleError, UnicodeDecodeError, ValueError):
+            await self._client.send_message(
+                message.chat.id,
+                "خواندن فایل ممکن نشد. فایل UTF-8 با حداکثر ۱ مگابایت و ۵۰هزار ردیف بفرستید.",
+            )
+            return
+        await fsm.clear()
+        await self._client.send_message(
+            message.chat.id,
+            f"شماره‌های متصل و عضو قبلی: {report.matched}\n"
+            f"پیدا‌نشده (قابل پیام نیستند): {report.unmatched}\n"
+            f"نامعتبر یا خالی: {report.invalid}\n"
+            "هیچ اشتراکی ایجاد یا پیامی ارسال نشد.",
+        )
 
     async def _handle_claim(self, message: Message, args: list[str]) -> None:
         if message.from_user is None:

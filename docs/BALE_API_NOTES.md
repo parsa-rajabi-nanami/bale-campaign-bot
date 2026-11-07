@@ -35,6 +35,9 @@ These behaviors are not specified sufficiently to rely on without defensive hand
 11. **Phone normalization:** The application normalizes Iranian mobile formats (`09…`, `+98…`, `0098…`) for matching. This is application behavior, not a Bale guarantee.
 12. **Undocumented update delivery details:** Long-poll timeout ceilings, retry cadence, duplicate delivery edge cases, and webhook retry/acknowledgment rules are not treated as stable guarantees. Persist update IDs and make processing idempotent.
 13. **File limits:** This project must enforce its own strict upload size and CSV row limits. Any Bale-side download/upload size limits must be verified separately.
+14. **Webhook request delivery:** The app expects a POST request with a JSON `Update` body at the configured path. The supplied Bale facts do not specify content-type, retry policy, acknowledgment body, or whether path routing is preserved by all intermediaries; verify these with a live bot and a reverse proxy. Access logs are disabled to avoid recording the secret path.
+15. **File download responses:** `getFile` is documented, but the file download's status codes, content-type, and content-length reliability are not specified. Download handling is bounded by streaming and enforces the local byte cap even when the server omits or lies about content length.
+16. **Webhook update ordering:** Webhook retries and ordering are not documented. The dispatcher serializes updates in one process and deduplicates persisted update IDs; a crash after an external handler side effect but before persistence can still repeat that side effect.
 
 ## Manual live-bot checklist
 
