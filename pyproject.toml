@@ -18,7 +18,7 @@ dependencies = [
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
   "PyYAML>=6.0.2,<7",
-  "SQLAlchemy>=2.0.36,<3",
+  "SQLAlchemy[asyncio]>=2.0.36,<3",
   "structlog>=24.4,<26",
 ]
 
@@ -36,7 +36,7 @@ dev = [
 ]
 
 [project.scripts]
-bale-campaign-bot = "bale_campaign_bot.main:main"
+bale-campaign-bot = "bale_campaign_bot.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bale_campaign_bot"]
@@ -68,7 +68,7 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 branch = true
-source = ["bale_campaign_bot"]
+source = ["bale_campaign_bot.bale"]
 
 [tool.coverage.report]
 show_missing = true
