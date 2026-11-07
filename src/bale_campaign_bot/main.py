@@ -54,7 +54,13 @@ async def _serve(settings: Settings) -> None:
             logger.info("bot_started", bot_id=bot.id, bot_username=bot.username)
             subscriber_service = SubscriberService(session_factory)
             public_handlers = PublicHandlers(client, subscriber_service, business)
-            admin_handlers = AdminHandlers(client, setup_service)
+            admin_handlers = AdminHandlers(
+                client,
+                setup_service,
+                session_factory,
+                business,
+                configured_admin_ids=settings.admin_id_set,
+            )
             router = BotRouter(client, public_handlers, admin_handlers)
             dispatcher = UpdateDispatcher(client, router, session_factory)
             dispatcher_task = asyncio.create_task(

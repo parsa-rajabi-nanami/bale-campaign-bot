@@ -18,6 +18,8 @@ The Bale client is the only layer that makes HTTP requests. It maps response env
 
 The schema is single-tenant. Subscriber chat IDs are the messaging address; phone numbers are optional matching metadata and do not create a subscription. Subscriber consent and opt-out state are persisted. Campaign recipients are intended to be materialized as a durable snapshot before sending.
 
+The admin campaign wizard stores its progress in `conversation_states`, so an interrupted wizard resumes after process restart. It saves the source chat/message pair and previews with `copyMessage`; it does not reconstruct or reformat the payload. Audience filters include every selected tag and exclude any selected tag, always against active subscribers. The recipient count shown in the draft is a preview; the sender must materialize a fresh recipient snapshot when the campaign starts. Campaign CTA buttons are stored separately and are sent as an explicit follow-up after the copied payload because `copyMessage` has no documented keyboard override.
+
 Time-sensitive operations accept an explicit timestamp or clock. Database timestamps use UTC; business-local scheduling and display use the configured IANA timezone, defaulting to `Asia/Tehran`.
 
 ## Delivery guarantee

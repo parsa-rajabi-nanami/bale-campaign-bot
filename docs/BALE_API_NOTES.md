@@ -12,6 +12,7 @@ The official Bale Bot API documentation at <https://docs.bale.ai/> is the refere
 - Text sent with `sendMessage` is limited to 1–4096 characters; media captions have a 1024-character limit.
 - Bale markup has no documented `parse_mode`; broadcast payloads therefore use `copyMessage` to preserve the source message and entities.
 - `copyMessage` returns a `MessageId`; the documented method has no reply-markup override. Campaign CTA buttons must be a separate follow-up unless live verification establishes support.
+- This project keeps campaign CTA buttons in the database and sends them as a separate `sendMessage` follow-up after the copied campaign payload. That follow-up behavior and whether all supported destination chats accept these button keyboards still require live verification; failure must not cause the original campaign copy to be resent.
 - `editMessageText` does not work for messages with an inline keyboard. Broadcast progress messages must have no keyboard; controls are separate.
 - `deleteMessage` is documented only for messages less than 48 hours old.
 - A bot can message only a chat that has started it. Phone-number import can identify linked opt-in users but must never subscribe or directly message unmatched numbers.

@@ -36,3 +36,41 @@ def phone_share_keyboard() -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         one_time_keyboard=True,
     )
+
+
+def admin_main_menu() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=fa.ADMIN_NEW_CAMPAIGN), KeyboardButton(text=fa.ADMIN_CAMPAIGNS)],
+            [KeyboardButton(text=fa.ADMIN_SUBSCRIBERS), KeyboardButton(text=fa.ADMIN_STATS)],
+            [KeyboardButton(text=fa.ADMIN_SETTINGS)],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def audience_choice_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=fa.AUDIENCE_ALL), KeyboardButton(text=fa.AUDIENCE_TAGS)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def schedule_choice_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=fa.SCHEDULE_NOW), KeyboardButton(text=fa.SCHEDULE_LATER)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def confirmation_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=fa.CONFIRM_CAMPAIGN), KeyboardButton(text=fa.SEND_TEST)],
+            [KeyboardButton(text=fa.CANCEL_CAMPAIGN)],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )

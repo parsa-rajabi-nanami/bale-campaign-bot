@@ -72,11 +72,14 @@ class BotRouter:
         if message is None:
             return
         command, _ = parse_command(message.text or "")
-        if command and message.chat.type == "private" and message.from_user is not None:
-            if not self._rate_limiter.allow(message.from_user.id):
-                await self._client.send_message(message.chat.id, RATE_LIMITED)
-                return
-            if command == "/claim":
-                await self._admin.handle_message(message)
-                return
+        if (
+            command
+            and message.chat.type == "private"
+            and message.from_user is not None
+            and not self._rate_limiter.allow(message.from_user.id)
+        ):
+            await self._client.send_message(message.chat.id, RATE_LIMITED)
+            return
+        if await self._admin.handle_message(message):
+            return
         await self._public.handle_message(message)

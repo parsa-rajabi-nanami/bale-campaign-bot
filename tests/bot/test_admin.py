@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from bale_campaign_bot.bale.client import BaleClient
 from bale_campaign_bot.bale.models import Chat, Message, User
 from bale_campaign_bot.bot.handlers.admin import AdminHandlers
+from bale_campaign_bot.config.business import validate_business_config
 from bale_campaign_bot.db.models import Admin
 from bale_campaign_bot.services.admins import AdminBootstrapService
 
@@ -43,7 +44,26 @@ async def test_claim_handler_requires_private_chat_and_claims_owner(
     )
     assert await bootstrap.create_setup_code() == "claim-me"
     client = BaleClient("TEST_TOKEN")
-    handlers = AdminHandlers(client, bootstrap)
+    business = validate_business_config(
+        {
+            "business": {
+                "name": "Demo",
+                "short_description": "Demo",
+                "welcome_message": "Welcome",
+                "about_text": "About",
+                "consent_text": "I agree",
+                "consent_version": "v1",
+                "opt_out_confirmation_text": "Stopped",
+            }
+        }
+    )
+    handlers = AdminHandlers(
+        client,
+        bootstrap,
+        test_session_factory,
+        business,
+        configured_admin_ids=(),
+    )
 
     async with client:
         await handlers.handle_message(

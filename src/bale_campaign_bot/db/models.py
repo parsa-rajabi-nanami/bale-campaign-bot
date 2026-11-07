@@ -130,6 +130,8 @@ class Campaign(TimestampMixin, Base):
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    audience_spec: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    cta_buttons: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list, nullable=False)
     recipient_count: Mapped[int] = mapped_column(Integer, default=0)
     sent_count: Mapped[int] = mapped_column(Integer, default=0)
     failed_count: Mapped[int] = mapped_column(Integer, default=0)

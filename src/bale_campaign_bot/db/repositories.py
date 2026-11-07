@@ -12,9 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bale_campaign_bot.db.models import (
     Admin,
     BotState,
+    Campaign,
     ConversationState,
     ProcessedUpdate,
     Subscriber,
+    SubscriberTag,
+    Tag,
 )
 
 Clock = Callable[[], datetime]
@@ -187,3 +190,96 @@ class BotStateRepository:
             state.value = value
             state.updated_at = self._clock()
         await self._session.flush()
+
+
+class CampaignRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, campaign_id: int) -> Campaign | None:
+        return await self._session.get(Campaign, campaign_id)
+
+    async def create_draft(
+        self,
+        *,
+        name: str,
+        created_by: int,
+        source_chat_id: int,
+        source_message_id: int,
+    ) -> Campaign:
+        campaign = Campaign(
+            name=name,
+            created_by=created_by,
+            source_chat_id=source_chat_id,
+            source_message_id=source_message_id,
+            status="draft",
+            audience_spec={"include_tags": [], "exclude_tags": []},
+            cta_buttons=[],
+        )
+        self._session.add(campaign)
+        await self._session.flush()
+        return campaign
+
+    async def list_for_admin(self, created_by: int, *, limit: int = 20) -> list[Campaign]:
+        result = await self._session.scalars(
+            select(Campaign)
+            .where(Campaign.created_by == created_by)
+            .order_by(Campaign.created_at.desc(), Campaign.id.desc())
+            .limit(limit)
+        )
+        return list(result)
+
+
+class TagRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_name(self, name: str) -> Tag | None:
+        return await self._session.scalar(select(Tag).where(Tag.name == name))
+
+    async def create(self, name: str, description: str | None = None) -> Tag:
+        tag = Tag(name=name, description=description)
+        self._session.add(tag)
+        await self._session.flush()
+        return tag
+
+    async def list_names(self, *, limit: int = 100) -> list[str]:
+        result = await self._session.scalars(select(Tag.name).order_by(Tag.name).limit(limit))
+        return list(result)
+
+    async def assign_to_chat(self, name: str, chat_id: int) -> bool:
+        tag = await self.get_by_name(name)
+        subscriber = await SubscriberRepository(self._session).get_by_chat_id(chat_id)
+        if tag is None or subscriber is None:
+            return False
+        existing = await self._session.get(SubscriberTag, (subscriber.id, tag.id))
+        if existing is None:
+            self._session.add(SubscriberTag(subscriber_id=subscriber.id, tag_id=tag.id))
+            await self._session.flush()
+        return True
+
+    async def count_active(
+        self,
+        *,
+        include_tags: tuple[str, ...] = (),
+        exclude_tags: tuple[str, ...] = (),
+    ) -> int:
+        query = select(func.count(Subscriber.id)).where(Subscriber.is_active.is_(True))
+        if include_tags:
+            matching_all = (
+                select(SubscriberTag.subscriber_id)
+                .join(Tag, Tag.id == SubscriberTag.tag_id)
+                .where(Tag.name.in_(include_tags))
+                .group_by(SubscriberTag.subscriber_id)
+                .having(func.count(func.distinct(Tag.name)) == len(set(include_tags)))
+            )
+            query = query.where(Subscriber.id.in_(matching_all))
+        if exclude_tags:
+            matching_any = (
+                select(SubscriberTag.subscriber_id)
+                .join(Tag, Tag.id == SubscriberTag.tag_id)
+                .where(Tag.name.in_(exclude_tags))
+            )
+            query = query.where(Subscriber.id.not_in(matching_any))
+        count = await self._session.scalar(query)
+        return count or 0
